@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# This command provides an interactive branch checkout experience using fzf (fuzzy finder).
+# It lists all branches (local and remote) and allows you to search and select one to checkout
+# using fuzzy search capabilities.
+#
+# Usage:
+# git-checkout
+# => Opens an interactive fuzzy finder showing all branches
+# => Type to filter branches
+# => Use arrow keys or mouse to select
+# => Press Enter to checkout the selected branch
+
+# List all local and remote branches and use fzf to select one
+chosen_branch=$(git branch -a | fzf --reverse --info=inline --header="Select branch to checkout" --header-first)
+
+# Remove branch markers, leading/trailing whitespace, and 'remotes/origin/' if present
+cleaned_branch=$(echo "$chosen_branch" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^[*+][[:space:]]*//' -e 's/^remotes\/origin\///')
+
+git checkout "$cleaned_branch"

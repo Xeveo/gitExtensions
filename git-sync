@@ -1,0 +1,34 @@
+#!/bin/bash
+
+# This command synchronizes a git branch with its remote counterpart, ensuring your local
+# branch is up-to-date with the remote repository. It handles branch switching and pruning
+# of remote references automatically.
+#
+# Features:
+# - Updates local branch with remote changes
+# - Prunes stale remote references
+# - Works with default (trunk) branch or specified branch
+# - Supports custom remote repository names
+#
+# Usage:
+# git-sync
+# => Syncs the trunk branch with the origin
+#
+# git-sync branch-name
+# => Syncs the provided branch with the origin
+#
+# git-sync branch-name origin-name
+# => Syncs the provided branch with the provided origin
+
+defaultBranch=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
+
+branch=${1:-$defaultBranch}
+upstream=${2:-origin}
+
+git checkout --quiet --detach
+
+git fetch "$upstream" --prune
+git fetch "$upstream" "$branch":"$branch" &&
+  echo "Updated '$branch' branch from '$upstream'"
+
+git checkout --quiet -

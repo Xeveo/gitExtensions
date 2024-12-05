@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# This command creates a fixup commit for a specified commit hash and automatically
+# performs a rebase to merge the fixup commit. It's useful for making corrections
+# or modifications to previous commits.
+#
+# Features:
+# - Creates a fixup commit that will be squashed into the target commit
+# - Optional auto-staging of all changes with -a flag
+# - Validates the provided commit hash exists
+# - Ensures there are staged changes before creating the fixup commit
+#
+# Usage:
+# git-fixup <commit-hash>
+# => Creates a fixup commit for the specified commit hash using currently staged changes
+#
+# git-fixup -a <commit-hash>
+# => Stages all changes and creates a fixup commit for the specified commit hash
+
+if [ $# -lt 1 ]; then
+    echo "Usage: git fixup [-a] <commit-hash>"
+    echo "  -a    Stage all changes before creating fixup commit"
+    exit 1
+fi
+
+stage_all=false
+commit_hash=""
+
+# Parse command-line options
+while [[ $# -gt 0 ]]; do
+    case $1 in
+    -a)
+        stage_all=true
+        shift
+        ;;
+    *)
+        commit_hash=$1
+        shift
+        ;;
+    esac
+done
+
+if [ -z "$commit_hash" ]; then
+    echo "Error: No commit hash provided"
+    exit 1
+fi
+
+if ! git rev-parse --quiet --verify "$commit_hash^{commit}" >/dev/null; then
+    echo "Error: Invalid commit hash"
+    exit 1
+fi
+
+if [ "$stage_all" = true ]; then
+    git add -A
+fi
+
+# Create the fixup commit
+if ! git commit --fixup="$commit_hash"; then
+    echo "Error: Failed to create fixup commit"
+    exit 1
+fi
+
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+main_branch=$(git remote show origin | grep 'HEAD branch' | cut -d' ' -f5)
+merge_base=$(git merge-base "$current_branch" "$main_branch")
+
+# Perform the automatic rebase
+GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash "$merge_base"

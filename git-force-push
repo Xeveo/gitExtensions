@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# This is a force push command with some safety features.
+# It's particularly useful when you've rewritten history locally (perhaps through rebasing) and
+# need to update the remote branch, but want to ensure you're not accidentally overwriting someone else's work.
+#
+# --force-with-lease: This is a safer alternative to --force. It will only force-push if your
+#                     local copy of the remote branch is up-to-date. This helps prevent accidentally
+#                     overwriting others' work that you haven't pulled yet.
+#
+# --force-if-includes: This option is an additional safety check. It ensures that your local branch contains
+#                      all the commits that existed in the remote branch when you last fetched. If someone
+#                      else has pushed new commits that you haven't incorporated, the push will fail.
+#
+# Usage:
+# git-force-push
+# => Pushes the current branch to the remote origin
+#
+# git-force-push upstream-name
+# => Pushes the current branch to the specified upstream
+
+upstream=${1:-origin}
+branch=$(git branch --show-current)
+git push --force-with-lease --force-if-includes "$upstream" "$branch"

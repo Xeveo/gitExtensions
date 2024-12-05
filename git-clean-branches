@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+
+# This command helps clean up local branches that don't have tracking remotes.
+# It provides an interactive interface using fzf to select and safely delete multiple branches.
+# The script shows each branch's last commit date to help identify old/stale branches.
+#
+# Features:
+# - Lists only branches without tracking remotes
+# - Shows last commit date for each branch
+# - Excludes current branch from deletion
+# - Excludes branches checked out in other worktrees
+# - Multi-select interface for choosing branches
+# - Confirmation prompt before deletion
+#
+# Usage:
+# git-clean-branches
+# => Opens an interactive fuzzy finder showing branches without tracking remotes
+# => Use Tab to select/deselect branches for deletion
+# => Ctrl-A to select all branches
+# => Ctrl-D to deselect all branches
+# => Type to filter branches
+# => Press Enter to confirm selection
+# => Confirm deletion with y/n
+
+set -euo pipefail
+
+# Check if fzf is installed
+if ! command -v fzf >/dev/null 2>&1; then
+    echo "Error: fzf is not installed. Please install it first." >&2
+    echo "You can install it with: brew install fzf" >&2
+    exit 1
+fi
+
+current_branch=$(git branch --show-current)
+
+get_branch_timestamp() {
+    local branch=$1
+    git log -1 --format=%at "refs/heads/$branch" 2>/dev/null || echo "0"
+}
+
+format_timestamp() {
+    local timestamp=$1
+    if [[ $timestamp == "0" ]]; then
+        echo "N/A"
+    else
+        date -r "$timestamp" "+%Y-%m-%d %H:%M:%S"
+    fi
+}
+
+# Get branches checked out in worktrees
+worktree_branches=$(git worktree list --porcelain | grep "^branch" | sed 's/^branch refs\/heads\///')
+
+# Get all local branches without tracking branches and their timestamps
+branches_data=$(git branch -vv | grep -v '\[.*\]' | awk '{print $1}' | while read -r branch; do
+    # Skip if branch doesn't exist (might have been deleted)
+    if ! git show-ref --verify --quiet "refs/heads/$branch"; then
+        continue
+    fi
+
+    # Skip if branch is checked out in a worktree
+    if echo "$worktree_branches" | grep -q "^$branch$"; then
+        continue
+    fi
+
+    # Skip current branch
+    if [[ "$branch" == "$current_branch" ]]; then
+        continue
+    fi
+
+    timestamp=$(get_branch_timestamp "$branch")
+    printf "%s\t%s\t%s\n" "$timestamp" "$branch" "$(format_timestamp "$timestamp")"
+done)
+
+if [[ -z "$branches_data" ]]; then
+    echo "No local branches without tracking branches found."
+    exit 0
+fi
+
+# Sort branches by timestamp (newest first) and format for display
+selected_branches=$(echo "$branches_data" | sort -rn | while read -r line; do
+    branch=$(echo "$line" | cut -f2)
+    date=$(echo "$line" | cut -f3)
+    printf "%s\t(%s)\n" "$branch" "$date"
+done | fzf --multi --reverse --header="Select branches to delete (Tab to toggle, Enter to confirm)" \
+    --header-first \
+    --prompt="Branches to delete > " \
+    --bind='ctrl-a:select-all,ctrl-d:deselect-all' \
+    --no-info | cut -f1)
+
+if [[ -z "$selected_branches" ]]; then
+    echo "No branches selected for deletion."
+    exit 0
+fi
+
+branch_count=$(echo "$selected_branches" | wc -l | tr -d ' ')
+
+echo "The following branches will be deleted:"
+echo "$selected_branches" | sed 's/^/  /'
+echo
+read -p "Delete these $branch_count branches? [y/N] " -n 1 -r
+echo
+
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    while read -r branch; do
+        if git branch -D "$branch"; then
+            echo "Deleted branch: $branch"
+        else
+            echo "Failed to delete branch: $branch" >&2
+        fi
+    done <<<"$selected_branches"
+    echo "Branch cleanup complete."
+else
+    echo "Operation cancelled."
+fi

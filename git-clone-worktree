@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+
+# git-clone-worktree: Clone With worktree setup
+#
+# This script clones a git repository in a way that's optimized for working with multiple worktrees.
+# It creates a bare repository in a .bare directory and sets up the necessary configuration for
+# working with worktrees.
+#
+# Usage:
+# git-clone-worktree git@github.com:name/repo.git
+# => Clones to a /repo directory
+#
+# git-clone-worktree git@github.com:name/repo.git my-repo
+# => Clones to a /my-repo directory
+#
+# After cloning, you can add your first worktree using:
+#   cd <repo-directory>
+#   git worktree add main origin/<default-branch>
+
+set -euo pipefail
+
+error() {
+    echo "Error: $1" >&2
+    exit 1
+}
+
+[ $# -lt 1 ] && error "Repository URL is required."
+
+url=$1
+basename=${url##*/}
+name=${2:-${basename%.*}}
+
+[ -e "$name" ] && error "Directory '$name' already exists"
+
+mkdir "$name" || error "Failed to create directory '$name'"
+
+cd "$name"
+
+git clone --bare "$url" .bare
+echo "gitdir: ./.bare" >.git
+
+# Fetch all branches
+git config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+
+git fetch origin
+
+defaultBranch=$(git -C .bare symbolic-ref --short HEAD)
+
+# Set default branch
+git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/"$defaultBranch"
+
+echo "Successfully cloned repository to '$name' directory"
+echo
+echo "To add your first worktree, run:"
+echo "  cd $name"
+echo "  git worktree add main origin/$defaultBranch"
